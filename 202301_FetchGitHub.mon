@@ -1,0 +1,104 @@
+using com.softwareag.connectivity.httpclient.HttpTransport;
+using com.softwareag.connectivity.httpclient.Response;
+using com.apama.json.JSONPlugin;
+using com.apama.util.AnyExtractor;
+
+/** Experiment with invoking the REST API of GitHub.
+*/
+monitor FetchGitHub {
+
+	/** Initialize the application */
+	action onload() {
+
+		// Be aware that the HTTP requests/responses are async.  i.e. that they may come back in a different order the requests.
+
+
+		// GitHub API doc: https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28
+
+
+		// Get the Metadata of a repo in GitHub https://api.github.com/   (https://api.github.com/repos/{owner}/{repo}/contents?ref={branch})
+		string owner := "kpalf";
+		string repo := "EPLApps_GithubSync_Sample";
+		string branch := "main";
+		HttpTransport.getOrCreate("api.github.com", 443).createGETRequest("/repos/"+owner+"/"+repo+"/contents?ref="+branch).execute(handleContentsResponse);
+		// Should return a payload that is a sequence of dictionaries, where there is one dictionary per file, with several different keys in it such as name, path sha, size, etc
+		
+		//e.g. for 2 files, LICENSE, and README.md
+		/*
+		[
+			{
+				"git_url":"https://api.github.com/repos/kpalf/EPLApps_GithubSync_Sample/git/blobs/261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+				"html_url":"https://github.com/kpalf/EPLApps_GithubSync_Sample/blob/main/LICENSE",
+				"sha":"261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+				"_links":{
+					"self":"https://api.github.com/repos/kpalf/EPLApps_GithubSync_Sample/contents/LICENSE?ref=main",
+					"html":"https://github.com/kpalf/EPLApps_GithubSync_Sample/blob/main/LICENSE",
+					"git":"https://api.github.com/repos/kpalf/EPLApps_GithubSync_Sample/git/blobs/261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64"
+					},
+				"path":"LICENSE",
+				"name":"LICENSE",
+				"download_url":"https://raw.githubusercontent.com/kpalf/EPLApps_GithubSync_Sample/main/LICENSE",
+				"size":11357,
+				"type":"file",
+				"url":"https://api.github.com/repos/kpalf/EPLApps_GithubSync_Sample/contents/LICENSE?ref=main"
+			},
+			{
+				"git_url":"https://api.github.com/repos/kpalf/EPLApps_GithubSync_Sample/git/blobs/4d89c504f0bda949834a18e1a7afd0cd914725bf",
+				"html_url":"https://github.com/kpalf/EPLApps_GithubSync_Sample/blob/main/README.md",
+				"sha":"4d89c504f0bda949834a18e1a7afd0cd914725bf",
+				"_links":{
+					"self":"https://api.github.com/repos/kpalf/EPLApps_GithubSync_Sample/contents/README.md?ref=main",
+					"html":"https://github.com/kpalf/EPLApps_GithubSync_Sample/blob/main/README.md",
+					"git":"https://api.github.com/repos/kpalf/EPLApps_GithubSync_Sample/git/blobs/4d89c504f0bda949834a18e1a7afd0cd914725bf"
+					},
+				"path":"README.md",
+				"name":"README.md",
+				"download_url":"https://raw.githubusercontent.com/kpalf/EPLApps_GithubSync_Sample/main/README.md",
+				"size":158,
+				"type":"file",
+				"url":"https://api.github.com/repos/kpalf/EPLApps_GithubSync_Sample/contents/README.md?ref=main"
+			}
+		]
+		*/
+
+
+
+		// Fetch one file from GitHub, such as https://raw.githubusercontent.com/kpalf/EPLApps_GithubSync_Sample/main/README.md
+		string filename := "README.md";
+		HttpTransport.getOrCreate("raw.githubusercontent.com", 443).createGETRequest("/"+owner+"/"+repo+"/"+branch+"/"+filename).execute(handleResponseRAW);
+
+
+	} // action onload()
+
+
+	/** Callback to handle the response listing the contents. */
+	action handleContentsResponse(Response response) {
+		log "handleContentsResponse() - response: "+response.toString() at INFO;
+		log "================================================================================" at INFO;
+		log "handleContentsResponse() - response.payload as a JSON encoded string: "+JSONPlugin.toJSON( response.payload ) at INFO;
+		log "================================================================================" at INFO;
+
+		// Lets see if we can iterate the files and get name/size/sha
+		sequence< any > items := response.payload.getSequenceOr("",new sequence<any>);
+		any anyitem;
+		for anyitem in items {
+			dictionary<any,any> item := <dictionary<any,any>> anyitem;  // Dictionary representing the metadata of one item in the repo
+			log "Filename: "+ <string>item["name"] at INFO;
+			log "    Size: "+ (<integer>item["size"]).toString() + "bytes" at INFO;
+			log "    Sha:  "+ <string>item["sha"] at INFO;
+			log "--------------------------------------------------------------------------------" at INFO;
+		}
+
+	} // handleContentsResponse()
+
+	/** Callback to handle the RAW file response - assuming a string file content. */
+	action handleResponseRAW(Response response) {
+		log "handleResponseRAW() - response: "+response.toString() at INFO;
+		log "================================================================================" at INFO;
+
+		string stringFileContent := response.payload.getString("");
+		log "handleResponseRAW() - response.payload: "+stringFileContent at INFO;
+		log "================================================================================" at INFO;
+	} //handleResponseRAW()
+
+} // monitor FetchGitHub
